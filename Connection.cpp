@@ -127,23 +127,28 @@ void poll_connections(
 		//only read from valid sockets marked readable:
 		if (c.socket == InvalidSocket || !FD_ISSET(c.socket, &read_fds)) continue;
 
-		ssize_t ret = recv(c.socket, buffer, BufferSize, MSG_DONTWAIT);
-		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-			//~no problem~ but no data
-		} else if (ret <= 0 || ret > (ssize_t)BufferSize) {
-			//~problem~ so remove connection
-			if (ret == 0) {
-				std::cerr << "[" << where << "] port closed, disconnecting." << std::endl;
-			} else if (ret < 0) {
-				std::cerr << "[" << where << "] recv() returned error " << errno << "(" << strerror(errno) << "), disconnecting." << std::endl;
-			} else {
-				std::cerr << "[" << where << "] recv() returned strange number of bytes, disconnecting." << std::endl;
+		while (true) { //read until more data left to read
+			ssize_t ret = recv(c.socket, buffer, BufferSize, MSG_DONTWAIT);
+			if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+				//~no problem~ but no data
+				break;
+			} else if (ret <= 0 || ret > (ssize_t)BufferSize) {
+				//~problem~ so remove connection
+				if (ret == 0) {
+					std::cerr << "[" << where << "] port closed, disconnecting." << std::endl;
+				} else if (ret < 0) {
+					std::cerr << "[" << where << "] recv() returned error " << errno << "(" << strerror(errno) << "), disconnecting." << std::endl;
+				} else {
+					std::cerr << "[" << where << "] recv() returned strange number of bytes, disconnecting." << std::endl;
+				}
+				c.close();
+				if (on_event) on_event(&c, Connection::OnClose);
+				break;
+			} else { //ret > 0
+				c.recv_buffer.insert(c.recv_buffer.end(), buffer, buffer + ret);
+				if (on_event) on_event(&c, Connection::OnRecv);
+				if (ret < BufferSize) break; //ran out of data before buffer: no more data left to read
 			}
-			c.close();
-			if (on_event) on_event(&c, Connection::OnClose);
-		} else { //ret > 0
-			c.recv_buffer.insert(c.recv_buffer.end(), buffer, buffer + ret);
-			if (on_event) on_event(&c, Connection::OnRecv);
 		}
 	}
 

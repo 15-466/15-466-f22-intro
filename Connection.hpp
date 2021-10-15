@@ -101,7 +101,8 @@ struct Connection {
 struct Server {
 	Server(std::string const &port); //pass the port number to listen on, as a string (servname, really)
 
-	//poll() updates the list of active connections and provides information to your callbacks:
+	//poll() updates the list of active connections and sends/receives data if possible:
+	// (will wait up to 'timeout' for first event)
 	void poll(
 		std::function< void(Connection *, Connection::Event event) > const &connection_event = nullptr,
 		double timeout = 0.0 //timeout (seconds)
@@ -115,7 +116,8 @@ struct Server {
 struct Client {
 	Client(std::string const &host, std::string const &port);
 
-	//poll() checks the status of the active connection and provides information to your callbacks:
+	//poll() checks the status of the active connection and sends/receives data if possible:
+	// (will wait up to 'timeout' for first event)
 	void poll(
 		std::function< void(Connection *, Connection::Event event) > const &connection_event = nullptr,
 		double timeout = 0.0 //timeout (seconds)
