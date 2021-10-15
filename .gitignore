@@ -12,6 +12,10 @@ dist/game.pdb
 dist/SDL2.dll
 dist/game
 dist/game.exe
+dist/client
+dist/client.exe
+dist/server
+dist/server.exe
 dist/freetype-test*
 scenes/show-meshes*
 scenes/show-scene*
