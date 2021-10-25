@@ -84,9 +84,9 @@ struct Connection {
 	explicit operator bool() { return socket != InvalidSocket; }
 
 	//To send data over a connection, append it to send_buffer:
-	std::vector< char > send_buffer;
+	std::vector< uint8_t > send_buffer;
 	//When the connection receives data, it is appended to recv_buffer:
-	std::vector< char > recv_buffer;
+	std::vector< uint8_t > recv_buffer;
 
 	//internals:
 	Socket socket = InvalidSocket;
