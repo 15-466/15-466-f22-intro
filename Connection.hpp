@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 	#else
 	typedef unsigned int Socket;
 	#endif
-	constexpr const Socket InvalidSocket = -1;
+	constexpr const Socket InvalidSocket = (Socket)-1;
 #else
 	//on linux, 'Socket' is just int and we'll use '-1' for an invalid value:
 	typedef int Socket;
