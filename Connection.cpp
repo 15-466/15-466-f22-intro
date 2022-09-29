@@ -203,9 +203,9 @@ Server::Server(std::string const &port) {
 		hints.ai_flags = AI_PASSIVE;
 
 		struct addrinfo *res = nullptr;
-		int ret = getaddrinfo(NULL, port.c_str(), &hints, &res);
-		if (ret != 0) {
-			throw std::runtime_error("getaddrinfo error: " + std::string(gai_strerror(ret)));
+		int addrinfo_ret = getaddrinfo(NULL, port.c_str(), &hints, &res);
+		if (addrinfo_ret != 0) {
+			throw std::runtime_error("getaddrinfo error: " + std::string(gai_strerror(addrinfo_ret)));
 		}
 
 		std::cout << "[Server::Server] binding to " << port << ":" << std::endl;
@@ -305,9 +305,9 @@ Client::Client(std::string const &host, std::string const &port) : connections(1
 		hints.ai_protocol = IPPROTO_TCP;
 
 		struct addrinfo *res = nullptr;
-		int ret = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
-		if (ret != 0) {
-			throw std::runtime_error("getaddrinfo error: " + std::string(gai_strerror(ret)));
+		int addrinfo_ret = getaddrinfo(host.c_str(), port.c_str(), &hints, &res);
+		if (addrinfo_ret != 0) {
+			throw std::runtime_error("getaddrinfo error: " + std::string(gai_strerror(addrinfo_ret)));
 		}
 
 		std::cout << "[Client::Client] connecting to " << host << ":" << port << ":" << std::endl;
