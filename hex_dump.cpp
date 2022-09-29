@@ -6,7 +6,7 @@ std::string hex_dump(void const *data, size_t size) {
 	constexpr size_t row_bytes = 16;
 	static_assert(row_bytes % 2 == 0, "must use even rows");
 
-	auto hex_digit = [](uint8_t val) {
+	auto hex_digit = [](uint8_t val) -> char {
 		if (val < 10) return '0' + val;
 		else return 'a' + (val - 10);
 	};
