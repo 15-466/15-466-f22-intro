@@ -264,7 +264,7 @@ bool Game::recv_state_message(Connection *connection_) {
 		read(&name_len);
 		//n.b. would probably be more efficient to directly copy from recv_buffer, but I think this is clearer:
 		player.name = "";
-		for (uint8_t i = 0; i < name_len; ++i) {
+		for (uint8_t n = 0; n < name_len; ++n) {
 			char c;
 			read(&c);
 			player.name += c;
