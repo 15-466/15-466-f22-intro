@@ -1,4 +1,5 @@
 objs/
+maek-cache.json
 dist/README-SDL.txt
 dist/README-glm.txt
 dist/README-libpng.txt
