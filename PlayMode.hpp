@@ -1,6 +1,7 @@
 #include "Mode.hpp"
 
 #include "Connection.hpp"
+#include "Game.hpp"
 
 #include <glm/glm.hpp>
 
@@ -18,11 +19,11 @@ struct PlayMode : Mode {
 
 	//----- game state -----
 
-	//input tracking:
-	struct Button {
-		uint8_t downs = 0;
-		uint8_t pressed = 0;
-	} left, right, down, up;
+	//input tracking for local player:
+	Player::Controls controls;
+
+	//latest game state (from server):
+	Game game;
 
 	//last message from server:
 	std::string server_message;
