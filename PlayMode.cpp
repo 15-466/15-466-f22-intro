@@ -106,7 +106,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	static std::array< glm::vec2, 16 > const circle = [](){
 		std::array< glm::vec2, 16 > ret;
 		for (uint32_t a = 0; a < ret.size(); ++a) {
-			float ang = a / float(ret.size()) * 2.0f * M_PI;
+			float ang = a / float(ret.size()) * 2.0f * float(M_PI);
 			ret[a] = glm::vec2(std::cos(ang), std::sin(ang));
 		}
 		return ret;
