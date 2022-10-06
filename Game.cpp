@@ -56,7 +56,7 @@ bool Player::Controls::recv_controls_message(Connection *connection_) {
 			std::cerr << "got a whole lot of downs" << std::endl;
 			d = 255;
 		}
-		button->downs = d;
+		button->downs = uint8_t(d);
 	};
 
 	recv_button(recv_buffer[4+0], &left);
@@ -208,7 +208,7 @@ void Game::send_state_message(Connection *connection_, Player *connection_player
 	
 		//NOTE: can't just 'send(name)' because player.name is not plain-old-data type.
 		//effectively: truncates player name to 255 chars
-		uint8_t len = std::min< size_t >(255, player.name.size());
+		uint8_t len = uint8_t(std::min< size_t >(255, player.name.size()));
 		connection.send(len);
 		connection.send_buffer.insert(connection.send_buffer.end(), player.name.begin(), player.name.begin() + len);
 	};
@@ -222,10 +222,10 @@ void Game::send_state_message(Connection *connection_, Player *connection_player
 	}
 
 	//compute the message size and patch into the message header:
-	uint32_t size = connection.send_buffer.size() - mark;
-	connection.send_buffer[mark-3] = size;
-	connection.send_buffer[mark-2] = size >> 8;
-	connection.send_buffer[mark-1] = size >> 16;
+	uint32_t size = uint32_t(connection.send_buffer.size() - mark);
+	connection.send_buffer[mark-3] = uint8_t(size);
+	connection.send_buffer[mark-2] = uint8_t(size >> 8);
+	connection.send_buffer[mark-1] = uint8_t(size >> 16);
 }
 
 bool Game::recv_state_message(Connection *connection_) {
