@@ -40,9 +40,17 @@ struct GP22IntroMode : Mode {
 		glm::u8vec4 Color;
 	};
 
-	//thing for path extensions:
-	float vel_init = 1.0f;
-	float vel_K = 1.0f;
+	struct LetterPath {
+		LetterPath();
+		float ofs_init, ofs_K;
+		std::vector< glm::vec2 > base;
+		void compute(std::vector< Vertex > *attribs, float time) const;
+		float strike = 5.0f;
+	};
+
+	std::vector< glm::vec2 > blob;
+	std::vector< LetterPath > letters;
+	std::vector< std::vector< glm::vec2 > > middle;
 
 	//animation is timed based on this accumulator:
 	float time = 0.0f;

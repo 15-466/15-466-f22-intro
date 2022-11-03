@@ -14,6 +14,158 @@
 #include <array>
 #include <unordered_map>
 
+namespace {
+	//letters:
+	[[maybe_unused]] const glm::u8vec4 FgFill1 = glm::u8vec4(0x9a, 0x22, 0x6d, 0xff);
+	[[maybe_unused]] const glm::u8vec4 FgFill2 = glm::u8vec4(0x59, 0x00, 0x3c, 0xff);
+	[[maybe_unused]] const glm::u8vec4 FgStroke1 = glm::u8vec4(0xcf, 0x49, 0x99, 0xff);
+	[[maybe_unused]] const glm::u8vec4 FgStroke2 = glm::u8vec4(0x59, 0x00, 0x3c, 0xff);
+
+	//capsule:
+	[[maybe_unused]] const glm::u8vec4 Fg = glm::u8vec4(0xd4, 0xcf, 0xea, 0xff);
+
+	//stripes:
+	const glm::u8vec4 Bg1 = glm::u8vec4(0xe2, 0xe2, 0xfe, 0xff);
+	const glm::u8vec4 Bg2 = glm::u8vec4(0xe7, 0xdb, 0xfc, 0xff);
+}
+
+
+static void stroke(std::vector< GP22IntroMode::Vertex > *attribs_,
+		std::vector< glm::vec2 > const &path, std::vector< float > const &param, float r,
+		glm::u8vec4 col_begin, std::vector< std:pair< float, glm::u8vec4 > > const &col_mid, glm::u8vec4 col_end) {
+	assert(attribs_);
+	auto &attribs = *attribs_;
+
+	assert(param.size() == path.size());
+
+	if (path.size() < 2) return;
+
+	glm::vec2 min = glm::vec2(std::numeric_limits< float >::infinity());
+	glm::vec2 max = glm::vec2(-std::numeric_limits< float >::infinity());
+
+	std::vector< std::pair< float, glm::u8vec4 > > param_col;
+	param_col.reserve(col_mid.size() + 2);
+	param_col.emplace_back(0.0f, col_begin);
+	param_col.insert(param_col.end(), col_mid.begin(), col_mid.end());
+	param_col.emplace_back(param.back(), col_end);
+
+	uint32_t pci = 0;
+
+	bool first = true;
+	auto emit = [&](glm::vec2 const &vert, float p) {
+		while (pci + 1 < param_col.size() && param_col[pci+1].first <= p) ++pci;
+
+		float amt = (p - param_col[pci].first) / (param_col[pci+1].first - param_col[pci].first);
+		glm::u8vec4 col = glm::u8vec4(
+			glm::mix(amt, glm::vec4(param_col[pci]), glm::vec4(param_col[pci]))
+		);
+
+		min = glm::min(min, vert);
+		max = glm::max(max, vert);
+		if (first && !attribs.empty()) attribs.emplace_back(attribs.back());
+		attribs.emplace_back(vert, col);
+		if (first && attribs.size() != 1) attribs.emplace_back(attribs.back());
+		first = false;
+	};
+
+	//mitered line strip:
+	glm::vec2 prev_along;
+	{
+		glm::vec2 along = glm::normalize(path[1] - path[0]);
+		glm::vec2 perp = glm::vec2(-along.y, along.x);
+		emit(path[0] - r * perp, param[0]);
+		emit(path[0] + r * perp, param[0]);
+		prev_along = along;
+	}
+	for (uint32_t i = 1; i + 1 < path.size(); ++i) {
+		glm::vec2 along = glm::normalize(path[i+1] - path[i]);
+		glm::vec2 perp = glm::vec2(-along.y, along.x);
+
+		glm::vec2 avg_along = glm::normalize(along + prev_along);
+		glm::vec2 avg_perp = glm::vec2(-avg_along.y, avg_along.x);
+
+		float r_ = r / glm::max(glm::dot(avg_perp, perp), 0.5f);
+
+		emit(path[i] - r_ * avg_perp, param[i]);
+		emit(path[i] + r_ * avg_perp, param[i]);
+
+		prev_along = along;
+	}
+	{
+		glm::vec2 along = glm::normalize(path.back() - path[path.size()-2]);
+		glm::vec2 perp = glm::vec2(-along.y, along.x);
+		emit(path.back() - r * perp, param.back());
+		emit(path.back() + r * perp, param.back());
+	}
+}
+
+static std::mt19937 mt;
+
+GP22IntroMode::LetterPath::LetterPath() {
+	ofs_init = mt() / float(mt.max()) * 2.0f * float(M_PI);
+	ofs_K = mt() / float(mt.max()) * 2.0f * float(M_PI);
+}
+
+void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float time) const {
+	std::vector< glm::vec2 > path = base;
+
+	float vel_K = (std::sin(time * 10.0f + ofs_K + 1.0f) * 0.5f + 0.5f) * (0.7f - 0.3f) + 0.3f;
+	float vel_init = (std::sin(time * 7.0f + ofs_init + 2.0f) * 0.5f + 0.5f) * (10.0f - 6.0f) + 6.0f;
+
+	//extend path out into a spiral somehow:
+	glm::vec2 min = glm::vec2(std::numeric_limits< float >::infinity());
+	glm::vec2 max = glm::vec2(-std::numeric_limits< float >::infinity());
+	for (auto const &v : path) {
+		min = glm::min(min, v);
+		max = glm::max(max, v);
+	}
+	//make the center of the spiral "center":
+	glm::vec2 center = 0.5f * (max + min);
+
+	//spring thing:
+	glm::vec2 at = path.back();
+	glm::vec2 vel = vel_init * glm::normalize(path.back() - path[path.size()-2]);
+
+	float r = glm::length(path.back() - center);
+	float ang = std::atan2(path.back().y - center.y, path.back().x - center.x);
+
+	for (uint32_t step = 0; step < 200; ++step) {
+		r += 0.05f;
+		ang -= 0.1f;
+		glm::vec2 target = r * glm::vec2(std::cos(ang), std::sin(ang)) + center;
+		vel *= std::pow(0.5f, 1.0f / 2000.0f);
+		vel += vel_K * (target - at);
+		at += 0.1f * vel;
+
+		path.emplace_back(at);
+	}
+
+	std::vector< float > len;
+	len.reserve(path.size());
+	double total = 0.0;
+	len.emplace_back(total);
+	for (uint32_t i = 1; i < path.size(); ++i) {
+		total += glm::length(path[i] - path[i-1]);
+		len.emplace_back(total);
+	}
+	float core = len[base.size()-1];
+
+	constexpr float vel = 1.0f;
+
+	float begin1 = 0.0f + std::max(strike - time, 0.0f) * vel;
+	float begin0 = begin1 - 0.1f * vel;
+
+	float end1 = std::max(core, begin1 + 0.1f * vel);
+	float end0 = std::max(core, begin1 + 0.5f * vel);
+
+	stroke(attribs, path, len, 0.16f, glm::u8vec4(0x00, 0x00, 0x00, 0xff), {
+		std::make_pair(begin0, glm::u8vec4(0xff, 0x00, 0x00, 0xff)),
+		std::make_pair(begin1, glm::u8vec4(0x00, 0xff, 0x00, 0xff)),
+		std::make_pair(end1, glm::u8vec4(0x00, 0x00, 0xff, 0xff)),
+		std::make_pair(end0, glm::u8vec4(0xff, 0xff, 0xff, 0xff))
+	}, glm::u8vec4(0x88, 0x88, 0x88, 0xff) );
+}
+
 GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_mode(next_mode_) {
 	{ // ------ music ------
 		std::vector< float > data(10 * 48000, 0.0f);
@@ -248,132 +400,8 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 	GL_ERRORS();
 
 	// ------ gp22 logo ------
-
-}
-
-GP22IntroMode::~GP22IntroMode() {
-}
-
-bool GP22IntroMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
-	/* DEBUG!
-	if (evt.type == SDL_KEYDOWN) {
-		//on any key press, skip the rest of the intro:
-		music->set_volume(0.0f, 1.0f / 10.0f);
-		Mode::set_current(next_mode);
-		return true;
-	}
-	*/
-	if (evt.type == SDL_MOUSEMOTION) {
-		vel_K = 0.3f + (0.7f - 0.3f) * (evt.motion.x / float(window_size.x));
-		vel_init = 6.0f + (10.0f - 6.0f) * (evt.motion.y / float(window_size.y));
-		std::cout << vel_K << " / " << vel_init << std::endl;
-	}
-	return false;
-}
-
-void GP22IntroMode::update(float elapsed) {
-	time += elapsed;
-	if (time > 10.0f) {
-		time -= 10.0f; //DEBUG!
-		music->set_volume(0.0f, 1.0f / 10.0f);
-		//Mode::set_current(next_mode); //DEBUG, should be here!
-		return;
-	}
-
-}
-
-void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
-	//requested visible bounds:
-	glm::vec2 scene_min = glm::vec2(-5.0f, -3.0f);
-	glm::vec2 scene_max = glm::vec2( 5.0f,  3.0f);
-
-	{ //actually, zoom those bounds out a bit:
-		glm::vec2 center = 0.5f * (scene_min + scene_max);
-		glm::vec2 radius = 0.5f * (scene_max - scene_min);
-		scene_min = center - 2.0f * radius;
-		scene_max = center + 2.0f * radius;
-	}
-
-	//computed visible bounds:
-	glm::vec2 screen_min, screen_max;
-
-	//compute matrix for vertex shader:
-	glm::mat4 object_to_clip;
-
-	{ //make sure scene_min - scene_max fits in drawable_size:
-		float aspect = drawable_size.x / float(drawable_size.y);
-		float scale = glm::min(
-			2.0f * aspect / (scene_max.x - scene_min.x),
-			2.0f / (scene_max.y - scene_min.y)
-		);
-		object_to_clip = glm::mat4(
-			scale / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, scale, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			scale / aspect * -0.5f * (scene_max.x + scene_min.x), scale * -0.5f * (scene_max.y + scene_min.y), 0.0f, 1.0f
-		);
-
-		screen_min = 0.5f * (scene_max + scene_min) - glm::vec2(aspect, 1.0f) / scale;
-		screen_max = 0.5f * (scene_max + scene_min) + glm::vec2(aspect, 1.0f) / scale;
-	}
-
-	//The oh-so-critical class colors:
-
-	//letters:
-	[[maybe_unused]] const glm::u8vec4 FgFill1 = glm::u8vec4(0x9a, 0x22, 0x6d, 0xff);
-	[[maybe_unused]] const glm::u8vec4 FgFill2 = glm::u8vec4(0x59, 0x00, 0x3c, 0xff);
-	[[maybe_unused]] const glm::u8vec4 FgStroke1 = glm::u8vec4(0xcf, 0x49, 0x99, 0xff);
-	[[maybe_unused]] const glm::u8vec4 FgStroke2 = glm::u8vec4(0x59, 0x00, 0x3c, 0xff);
-
-	//capsule:
-	[[maybe_unused]] const glm::u8vec4 Fg = glm::u8vec4(0xd4, 0xcf, 0xea, 0xff);
-
-	//stripes:
-	const glm::u8vec4 Bg1 = glm::u8vec4(0xe2, 0xe2, 0xfe, 0xff);
-	const glm::u8vec4 Bg2 = glm::u8vec4(0xe7, 0xdb, 0xfc, 0xff);
-
-	//compute triangles to draw:
-	std::vector< Vertex > attribs;
-	
-	//--- striped background ---
-	{
-		float angle = 52.0f / 180.0f * float(M_PI);
-		glm::vec2 dir = glm::vec2(std::cos(angle), std::sin(angle));
-		glm::vec2 perp = glm::vec2(-dir.y, dir.x);
-
-		float ofs = time * -0.7f;
-
-		float w = 0.7f;
-
-		auto [perp_min, perp_max] = std::minmax({
-			glm::dot(perp, glm::vec2(screen_min.x, screen_min.y)),
-			glm::dot(perp, glm::vec2(screen_max.x, screen_min.y)),
-			glm::dot(perp, glm::vec2(screen_min.x, screen_max.y)),
-			glm::dot(perp, glm::vec2(screen_max.x, screen_max.y))
-		});
-
-		auto [dir_min, dir_max] = std::minmax({
-			glm::dot(dir, glm::vec2(screen_min.x, screen_min.y)),
-			glm::dot(dir, glm::vec2(screen_max.x, screen_min.y)),
-			glm::dot(dir, glm::vec2(screen_min.x, screen_max.y)),
-			glm::dot(dir, glm::vec2(screen_max.x, screen_max.y))
-		});
-
-		for (int32_t s = int32_t(std::floor(perp_min / w - ofs)); s <= int32_t(std::floor(perp_max / w - ofs)); ++s) {
-			if (!attribs.empty()) attribs.emplace_back(attribs.back());
-			attribs.emplace_back(perp * ((ofs + s) * w) + dir * dir_min, Bg1);
-			if (attribs.size() != 1) attribs.emplace_back(attribs.back());
-			attribs.emplace_back(perp * ((ofs + s + 0.5f) * w) + dir * dir_min, Bg1);
-			attribs.emplace_back(perp * ((ofs + s) * w) + dir * dir_max, Bg1);
-			attribs.emplace_back(perp * ((ofs + s + 0.5f) * w) + dir * dir_max, Bg1);
-		}
-	}
-
-	//--- letters somehow ---
 	{
 		//quick-n-hack-y svg path interpreter:
-		//actual SVG path -- center is the middle of the first line:
-		//m 233.7,392.20001 39.3,-14.5 M 283.1,297 c 0,-18.6 -29.7,-20.8 -29.7,7 0,8.1 -0.2,161.7 -0.8,171.7 -1.3,22.6 -29.1,24.9 -29.1,0.7 M 30.1,323.8 c 11.7,10 22.6,18.8 35.9,23.3 8,2.7 18,4 25.8,3.3 19.4,-1.7 23.8,-23.5 -1.5,-24.5 -46,-1.8 -56.3,25.8 -57.9,75.4 -2,63.5 79.6,65.9 81,20.2 L 88.2,421 M 190,455 c -21.5,-0.2 -38.3,-10.6 -39.6,-33.8 -2.8,-47.1 1.2,-93 27.1,-95.2 45.6,-3.9 39.6,51.8 3.7,51.8 -32.5,0 -37.6,-27.2 -46.2,-48.7
 		std::vector< std::vector< glm::vec2 > > paths;
 		[[maybe_unused]] auto svg_L = [&paths](std::vector< float > const &coords) {
 			assert(!coords.empty() && coords.size() % 2 == 0);
@@ -469,7 +497,7 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 		// z
 		paths.back().emplace_back(paths.back()[0]); //probably not needed
 
-		std::vector< glm::vec2 > blob = std::move(paths.back());
+		blob = std::move(paths.back());
 		paths.pop_back();
 		for (auto &v : blob) {
 			v = 0.02f * (v + glm::vec2(-254.0f, -123.0f));
@@ -488,6 +516,9 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 				}
 			}
 		}
+
+		std::reverse(paths[2].begin(), paths[2].end());
+
 		{ //last two letters get rotated copies:
 			auto rc = [&](uint32_t si) {
 				paths.emplace_back(paths.at(si));
@@ -499,99 +530,138 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 			rc(3);
 		}
 
-		//extend path out into a spiral somehow:
-		auto ext = [](std::vector< glm::vec2 > &path, float vel_K, float vel_init) {
-			glm::vec2 min = glm::vec2(std::numeric_limits< float >::infinity());
-			glm::vec2 max = glm::vec2(-std::numeric_limits< float >::infinity());
-			for (auto const &v : path) {
-				min = glm::min(min, v);
-				max = glm::max(max, v);
-			}
-			//make the center of the spiral "center":
-			glm::vec2 center = 0.5f * (max + min);
+		assert(paths.size() == 6);
+		letters.resize(4);
+		letters[0].base = std::move(paths[2]);
+		letters[1].base = std::move(paths[3]);
+		letters[2].base = std::move(paths[4]);
+		letters[3].base = std::move(paths[5]);
 
-			//spring thing:
-
-			glm::vec2 at = path.back();
-			glm::vec2 vel = vel_init * glm::normalize(path.back() - path[path.size()-2]);
-
-			float r = glm::length(path.back() - center);
-			float ang = std::atan2(path.back().y - center.y, path.back().x - center.x);
-
-			for (uint32_t step = 0; step < 100; ++step) {
-				r += 0.05f;
-				ang -= 0.1f;
-				glm::vec2 target = r * glm::vec2(std::cos(ang), std::sin(ang)) + center;
-				vel *= std::pow(0.5f, 1.0f / 2000.0f);
-				vel += vel_K * (target - at);
-				at += 0.1f * vel;
-
-				path.emplace_back(at);
-			}
-		};
-
-		std::reverse(paths[2].begin(), paths[2].end());
-		ext(paths[2], vel_K, vel_init);
-		ext(paths[3], vel_K, vel_init);
-
-		//draw the blob:
-		for (uint32_t i = 0; i < (blob.size()+1)/2; ++i) {
-			if (i == 0 && !attribs.empty()) attribs.emplace_back(attribs.back());
-			attribs.emplace_back(blob[i], Fg);
-			if (i == 0 && attribs.size() != 1) attribs.emplace_back(attribs.back());
-			attribs.emplace_back(blob[blob.size()-i], Fg);
-		}
-
-
-		glm::vec2 min = glm::vec2(std::numeric_limits< float >::infinity());
-		glm::vec2 max = glm::vec2(-std::numeric_limits< float >::infinity());
-
-		for (auto const &path : paths) {
-			bool first = true;
-			auto emit = [&](glm::vec2 const &vert) {
-				min = glm::min(min, vert);
-				max = glm::max(max, vert);
-				if (first && !attribs.empty()) attribs.emplace_back(attribs.back());
-				attribs.emplace_back(vert, FgFill1);
-				if (first && attribs.size() != 1) attribs.emplace_back(attribs.back());
-				first = false;
-			};
-
-			//mitered line strip:
-			float r = 0.16f;
-			glm::vec2 prev_along;
-			{
-				glm::vec2 along = glm::normalize(path[1] - path[0]);
-				glm::vec2 perp = glm::vec2(-along.y, along.x);
-				emit(path[0] - r * perp);
-				emit(path[0] + r * perp);
-				prev_along = along;
-			}
-			for (uint32_t i = 1; i + 1 < path.size(); ++i) {
-				glm::vec2 along = glm::normalize(path[i+1] - path[i]);
-				glm::vec2 perp = glm::vec2(-along.y, along.x);
-
-				glm::vec2 avg_along = glm::normalize(along + prev_along);
-				glm::vec2 avg_perp = glm::vec2(-avg_along.y, avg_along.x);
-
-				float r_ = r / glm::max(glm::dot(avg_perp, perp), 0.5f);
-
-				emit(path[i] - r_ * avg_perp);
-				emit(path[i] + r_ * avg_perp);
-
-				prev_along = along;
-			}
-			{
-				glm::vec2 along = glm::normalize(path.back() - path[path.size()-2]);
-				glm::vec2 perp = glm::vec2(-along.y, along.x);
-				emit(path.back() - r * perp);
-				emit(path.back() + r * perp);
-			}
-		}
-
+		middle.resize(2);
+		middle[0] = std::move(paths[0]);
+		middle[1] = std::move(paths[1]);
 	}
 
+}
 
+GP22IntroMode::~GP22IntroMode() {
+}
+
+bool GP22IntroMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+	/* DEBUG!
+	if (evt.type == SDL_KEYDOWN) {
+		//on any key press, skip the rest of the intro:
+		music->set_volume(0.0f, 1.0f / 10.0f);
+		Mode::set_current(next_mode);
+		return true;
+	}
+	*/
+	if (evt.type == SDL_MOUSEMOTION) {
+		vel_K = 0.3f + (0.7f - 0.3f) * (evt.motion.x / float(window_size.x));
+		vel_init = 6.0f + (10.0f - 6.0f) * (evt.motion.y / float(window_size.y));
+		std::cout << vel_K << " / " << vel_init << std::endl;
+	}
+	return false;
+}
+
+void GP22IntroMode::update(float elapsed) {
+	time += elapsed;
+	if (time > 10.0f) {
+		time -= 10.0f; //DEBUG!
+		music->set_volume(0.0f, 1.0f / 10.0f);
+		//Mode::set_current(next_mode); //DEBUG, should be here!
+		return;
+	}
+
+}
+
+void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
+	//requested visible bounds:
+	glm::vec2 scene_min = glm::vec2(-5.0f, -3.0f);
+	glm::vec2 scene_max = glm::vec2( 5.0f,  3.0f);
+
+	{ //actually, zoom those bounds out a bit:
+		glm::vec2 center = 0.5f * (scene_min + scene_max);
+		glm::vec2 radius = 0.5f * (scene_max - scene_min);
+		scene_min = center - 2.0f * radius;
+		scene_max = center + 2.0f * radius;
+	}
+
+	//computed visible bounds:
+	glm::vec2 screen_min, screen_max;
+
+	//compute matrix for vertex shader:
+	glm::mat4 object_to_clip;
+
+	{ //make sure scene_min - scene_max fits in drawable_size:
+		float aspect = drawable_size.x / float(drawable_size.y);
+		float scale = glm::min(
+			2.0f * aspect / (scene_max.x - scene_min.x),
+			2.0f / (scene_max.y - scene_min.y)
+		);
+		object_to_clip = glm::mat4(
+			scale / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, scale, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			scale / aspect * -0.5f * (scene_max.x + scene_min.x), scale * -0.5f * (scene_max.y + scene_min.y), 0.0f, 1.0f
+		);
+
+		screen_min = 0.5f * (scene_max + scene_min) - glm::vec2(aspect, 1.0f) / scale;
+		screen_max = 0.5f * (scene_max + scene_min) + glm::vec2(aspect, 1.0f) / scale;
+	}
+	
+	//compute triangles to draw:
+	std::vector< Vertex > attribs;
+	
+	//--- striped background ---
+	{
+		float angle = 52.0f / 180.0f * float(M_PI);
+		glm::vec2 dir = glm::vec2(std::cos(angle), std::sin(angle));
+		glm::vec2 perp = glm::vec2(-dir.y, dir.x);
+
+		float ofs = time * -0.7f;
+
+		float w = 0.7f;
+
+		auto [perp_min, perp_max] = std::minmax({
+			glm::dot(perp, glm::vec2(screen_min.x, screen_min.y)),
+			glm::dot(perp, glm::vec2(screen_max.x, screen_min.y)),
+			glm::dot(perp, glm::vec2(screen_min.x, screen_max.y)),
+			glm::dot(perp, glm::vec2(screen_max.x, screen_max.y))
+		});
+
+		auto [dir_min, dir_max] = std::minmax({
+			glm::dot(dir, glm::vec2(screen_min.x, screen_min.y)),
+			glm::dot(dir, glm::vec2(screen_max.x, screen_min.y)),
+			glm::dot(dir, glm::vec2(screen_min.x, screen_max.y)),
+			glm::dot(dir, glm::vec2(screen_max.x, screen_max.y))
+		});
+
+		for (int32_t s = int32_t(std::floor(perp_min / w - ofs)); s <= int32_t(std::floor(perp_max / w - ofs)); ++s) {
+			if (!attribs.empty()) attribs.emplace_back(attribs.back());
+			attribs.emplace_back(perp * ((ofs + s) * w) + dir * dir_min, Bg1);
+			if (attribs.size() != 1) attribs.emplace_back(attribs.back());
+			attribs.emplace_back(perp * ((ofs + s + 0.5f) * w) + dir * dir_min, Bg1);
+			attribs.emplace_back(perp * ((ofs + s) * w) + dir * dir_max, Bg1);
+			attribs.emplace_back(perp * ((ofs + s + 0.5f) * w) + dir * dir_max, Bg1);
+		}
+	}
+
+	//--- background blob ---
+	for (uint32_t i = 0; i < (blob.size()+1)/2; ++i) {
+		if (i == 0 && !attribs.empty()) attribs.emplace_back(attribs.back());
+		attribs.emplace_back(blob[i], Fg);
+		if (i == 0 && attribs.size() != 1) attribs.emplace_back(attribs.back());
+		attribs.emplace_back(blob[blob.size()-i], Fg);
+	}
+
+	//--- letters ---
+	for (auto const &letter : letters) {
+		letter.compute(&attribs, time);
+	}
+	for (auto const &m : middle) {
+		stroke(&attribs, m, 0.16f, FgFill2);
+	}
 
 	//----- actually draw ----
 	// (Based on DrawLines.cpp)
