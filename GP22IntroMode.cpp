@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/hash.hpp>
+#include <glm/gtx/transform.hpp>
 
 #include <algorithm>
 #include <random>
@@ -32,7 +33,7 @@ namespace {
 
 static void stroke(std::vector< GP22IntroMode::Vertex > *attribs_,
 		std::vector< glm::vec2 > const &path, std::vector< float > const &param, float r,
-		glm::u8vec4 col_begin, std::vector< std:pair< float, glm::u8vec4 > > const &col_mid, glm::u8vec4 col_end) {
+		glm::u8vec4 col_begin, std::vector< std::pair< float, glm::u8vec4 > > const &col_mid, glm::u8vec4 col_end) {
 	assert(attribs_);
 	auto &attribs = *attribs_;
 
@@ -57,7 +58,7 @@ static void stroke(std::vector< GP22IntroMode::Vertex > *attribs_,
 
 		float amt = (p - param_col[pci].first) / (param_col[pci+1].first - param_col[pci].first);
 		glm::u8vec4 col = glm::u8vec4(
-			glm::mix(amt, glm::vec4(param_col[pci]), glm::vec4(param_col[pci]))
+			glm::mix(glm::vec4(param_col[pci].second), glm::vec4(param_col[pci+1].second), amt)
 		);
 
 		min = glm::min(min, vert);
@@ -109,8 +110,10 @@ GP22IntroMode::LetterPath::LetterPath() {
 void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float time) const {
 	std::vector< glm::vec2 > path = base;
 
-	float vel_K = (std::sin(time * 10.0f + ofs_K + 1.0f) * 0.5f + 0.5f) * (0.7f - 0.3f) + 0.3f;
-	float vel_init = (std::sin(time * 7.0f + ofs_init + 2.0f) * 0.5f + 0.5f) * (10.0f - 6.0f) + 6.0f;
+	//float vel_K = (std::sin(time * 10.0f + ofs_K + 1.0f) * 0.5f + 0.5f) * (0.7f - 0.3f) + 0.3f;
+	//float vel_init = (std::sin(time * 7.0f + ofs_init + 2.0f) * 0.5f + 0.5f) * (10.0f - 6.0f) + 6.0f;
+	float vel_K = (std::sin(1.0f * 10.0f + ofs_K + 1.0f) * 0.5f + 0.5f) * (0.7f - 0.3f) + 0.3f;
+	float vel_init = (std::sin(1.0f * 7.0f + ofs_init + 2.0f) * 0.5f + 0.5f) * (7.0f - 5.0f) + 5.0f;
 
 	//extend path out into a spiral somehow:
 	glm::vec2 min = glm::vec2(std::numeric_limits< float >::infinity());
@@ -130,7 +133,7 @@ void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float ti
 	float ang = std::atan2(path.back().y - center.y, path.back().x - center.x);
 
 	for (uint32_t step = 0; step < 200; ++step) {
-		r += 0.05f;
+		r += 0.1f;
 		ang -= 0.1f;
 		glm::vec2 target = r * glm::vec2(std::cos(ang), std::sin(ang)) + center;
 		vel *= std::pow(0.5f, 1.0f / 2000.0f);
@@ -150,23 +153,27 @@ void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float ti
 	}
 	float core = len[base.size()-1];
 
-	constexpr float vel = 1.0f;
+	constexpr float VEL = 20.0f;
 
-	float begin1 = 0.0f + std::max(strike - time, 0.0f) * vel;
-	float begin0 = begin1 - 0.1f * vel;
+	float front = (strike - time) * VEL;
+	float begin1 = std::max(front, 0.0f);
+	float begin0 = begin1 - 0.01f * VEL;
+	float begin2 = std::max(front + 0.05f * VEL, 0.0f);
 
-	float end1 = std::max(core, begin1 + 0.1f * vel);
-	float end0 = std::max(core, begin1 + 0.5f * vel);
+	float end1 = std::max(core, front + 0.1f * VEL);
+	float end0 = std::max(core, front + 0.5f * VEL);
 
-	stroke(attribs, path, len, 0.16f, glm::u8vec4(0x00, 0x00, 0x00, 0xff), {
-		std::make_pair(begin0, glm::u8vec4(0xff, 0x00, 0x00, 0xff)),
-		std::make_pair(begin1, glm::u8vec4(0x00, 0xff, 0x00, 0xff)),
-		std::make_pair(end1, glm::u8vec4(0x00, 0x00, 0xff, 0xff)),
-		std::make_pair(end0, glm::u8vec4(0xff, 0xff, 0xff, 0xff))
-	}, glm::u8vec4(0x88, 0x88, 0x88, 0xff) );
+	stroke(attribs, path, len, 0.16f, glm::u8vec4(0x00, 0x00, 0x00, 0x00), {
+		std::make_pair(begin0, glm::u8vec4(FgFill1.r, FgFill1.g, FgFill1.b, 0x00)),
+		std::make_pair(begin1, glm::u8vec4(FgFill1.r, FgFill1.g, FgFill1.b, 0xff)),
+		std::make_pair(begin2, glm::u8vec4(FgFill1.r, FgFill1.g, FgFill1.b, 0xff)),
+		std::make_pair(end1, glm::u8vec4(FgFill2.r, FgFill2.g, FgFill2.b, 0xff)),
+		std::make_pair(end0, glm::u8vec4(FgFill2.r, FgFill2.g, FgFill2.b, 0x00))
+	}, glm::u8vec4(0x00, 0x00, 0x00, 0x00) );
 }
 
 GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_mode(next_mode_) {
+	float bpm = 140.0f;
 	{ // ------ music ------
 		std::vector< float > data(10 * 48000, 0.0f);
 
@@ -182,6 +189,12 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 			float pm = std::sin(t * 1.01f * 2.0f * float(M_PI));
 			float sub = std::sin(0.5f * t * 2.0f * float(M_PI));
 			return 0.5f * std::sin((t + 0.3f * pm) * 2.0f * float(M_PI)) + 0.5f * sub;
+		};
+
+		//square wave (lightly pulse-width-modulated):
+		[[maybe_unused]] auto square = [](float t) -> float {
+			float w = 0.5f + 0.1f * std::sin(t * 0.1f);
+			return (t - std::floor(t) > w ? 1.0f : -1.0f);
 		};
 
 		constexpr float Attack  = 0.02f;
@@ -229,7 +242,6 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 		[[maybe_unused]] auto As= [](int32_t oct) { return 22.0f + 12.0f * oct; };
 		[[maybe_unused]] auto B = [](int32_t oct) { return 23.0f + 12.0f * oct; };
 		
-		float bpm = 140.0f;
 
 		auto tones = [&]( std::function< float(float) > const &wave, float hz, float step, std::string const &score ) {
 			for (uint32_t begin = 0; begin < score.size(); /* later */) {
@@ -276,6 +288,12 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 		tones( sine, midi2hz( Cs(2)), 0.5f * 60.0f / bpm, "1 . . . 2 . . . 3 . . . 4 . . . ");
 		tones( sine, midi2hz( As(1)), 0.5f * 60.0f / bpm, "1 . . . 2 . . . 3 . . . 4 . . . ");
 
+		//flourish:
+		tones( square, midi2hz( F(4) ), 0.5f * 60.0f / bpm, "1 . . . 2 . . . 3 . o . 4 . . . ");
+		tones( square, midi2hz( Ds(4)), 0.5f * 60.0f / bpm, "1 . . . 2 . . . 3 o . . 4 . . . ");
+		tones( square, midi2hz( As(3)), 0.5f * 60.0f / bpm, "1 . . . 2 . . . 3o. . . 4 . . . ");
+		tones( square, midi2hz( Gs(3)), 0.5f * 60.0f / bpm, "1 . . . 2 . . . o . . . 4 . . . ");
+
 		{ //gently re-center output (remove dc):
 			float smoothed = 0.0f;
 			for (float &s : data) {
@@ -298,7 +316,7 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 					+ 6.0f * tap(0.43f)
 					+ 5.0f * tap(0.21f)
 					+ 3.0f * tap(0.13f)
-					+ 1.0f * tap(0.07f)
+					+ 1.0f * tap(0.09f)
 					) / 16.0f;
 				smoothed += 0.95f * (wet - smoothed); //smooth off high frequencies before writing reverb buffer
 				delay[head] = smoothed;
@@ -309,6 +327,11 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 
 		{ //do a gentle low-pass filter on output:
 			float smoothed = 0.0f;
+			for (float &s : data) {
+				smoothed += 0.3f * (s - smoothed);
+				s = smoothed;
+			}
+			smoothed = 0.0f;
 			for (float &s : data) {
 				smoothed += 0.3f * (s - smoothed);
 				s = smoothed;
@@ -330,7 +353,9 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 
 		static std::unique_ptr< Sound::Sample > music_sample; //making static so it lives past lifetime of IntroMode
 
-		music_sample = std::make_unique< Sound::Sample >(data);
+		if (!music_sample) { //<-- when playing repeatedly for testing, want to avoid deallocating sample
+			music_sample = std::make_unique< Sound::Sample >(data);
+		}
 
 		music = Sound::play(*music_sample);
 	}
@@ -537,6 +562,17 @@ GP22IntroMode::GP22IntroMode(std::shared_ptr< Mode > const &next_mode_) : next_m
 		letters[2].base = std::move(paths[4]);
 		letters[3].base = std::move(paths[5]);
 
+		std::array< float, 4 > strikes{
+			(8 * 2) * 0.5f * 60.0f / bpm,
+			(8 * 2+1) * 0.5f * 60.0f / bpm,
+			(8 * 2+2) * 0.5f * 60.0f / bpm,
+			(8 * 2+4) * 0.5f * 60.0f / bpm
+		};
+		std::shuffle(strikes.begin(), strikes.end(), mt);
+		for (uint32_t i = 0; i < 4; ++i) {
+			letters[i].strike = strikes[i];
+		}
+
 		middle.resize(2);
 		middle[0] = std::move(paths[0]);
 		middle[1] = std::move(paths[1]);
@@ -557,9 +593,9 @@ bool GP22IntroMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_
 	}
 	*/
 	if (evt.type == SDL_MOUSEMOTION) {
-		vel_K = 0.3f + (0.7f - 0.3f) * (evt.motion.x / float(window_size.x));
-		vel_init = 6.0f + (10.0f - 6.0f) * (evt.motion.y / float(window_size.y));
-		std::cout << vel_K << " / " << vel_init << std::endl;
+		//vel_K = 0.3f + (0.7f - 0.3f) * (evt.motion.x / float(window_size.x));
+		//vel_init = 6.0f + (10.0f - 6.0f) * (evt.motion.y / float(window_size.y));
+		//std::cout << vel_K << " / " << vel_init << std::endl;
 	}
 	return false;
 }
@@ -570,6 +606,7 @@ void GP22IntroMode::update(float elapsed) {
 		time -= 10.0f; //DEBUG!
 		music->set_volume(0.0f, 1.0f / 10.0f);
 		//Mode::set_current(next_mode); //DEBUG, should be here!
+		Mode::set_current(std::make_shared< GP22IntroMode >(next_mode));
 		return;
 	}
 
@@ -613,6 +650,7 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 	//compute triangles to draw:
 	std::vector< Vertex > attribs;
 	
+	size_t bg_start = attribs.size();
 	//--- striped background ---
 	{
 		float angle = 52.0f / 180.0f * float(M_PI);
@@ -646,22 +684,54 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 			attribs.emplace_back(perp * ((ofs + s + 0.5f) * w) + dir * dir_max, Bg1);
 		}
 	}
+	size_t bg_end = attribs.size();
 
+	float fade_in = std::min(1.0f, time / 2.0f);
+	uint8_t fade8 = uint8_t(fade_in * 255.0f);
+
+	size_t mg_start = attribs.size();
 	//--- background blob ---
-	for (uint32_t i = 0; i < (blob.size()+1)/2; ++i) {
+	for (uint32_t i = 0; i < blob.size()/2; ++i) {
 		if (i == 0 && !attribs.empty()) attribs.emplace_back(attribs.back());
-		attribs.emplace_back(blob[i], Fg);
+		attribs.emplace_back(blob[i], glm::u8vec4(glm::u8vec3(Fg), fade8));
 		if (i == 0 && attribs.size() != 1) attribs.emplace_back(attribs.back());
-		attribs.emplace_back(blob[blob.size()-i], Fg);
+		attribs.emplace_back(blob[blob.size()-i-1], glm::u8vec4(glm::u8vec3(Fg), fade8));
 	}
 
+	{ //middle clef:
+		for (auto const &m : middle) {
+			std::vector< float > len;
+			len.reserve(m.size());
+			double total = 0.0;
+			len.emplace_back(total);
+			for (uint32_t i = 1; i < m.size(); ++i) {
+				total += glm::length(m[i] - m[i-1]);
+				len.emplace_back(total);
+			}
+			stroke(&attribs, m, len, 0.16f, glm::u8vec4(glm::u8vec3(FgFill2), fade8), {}, glm::u8vec4(glm::u8vec3(FgFill1), fade8));
+		}
+	}
+	size_t mg_end = attribs.size();
+
+	size_t fg_start = attribs.size();
 	//--- letters ---
 	for (auto const &letter : letters) {
 		letter.compute(&attribs, time);
 	}
-	for (auto const &m : middle) {
-		stroke(&attribs, m, 0.16f, FgFill2);
+	size_t fg_end = attribs.size();
+
+	float spin = 0.0f;
+	for (auto const &letter : letters) {
+		if (time > letter.strike) {
+			float amt = std::min((time - letter.strike) / 2.0f, 1.0f);
+			amt = 1.0f - (std::pow(0.1f, amt) - 0.1f) / 0.9f;
+			spin += amt;
+		}
 	}
+	spin *= glm::radians(540.0f) / letters.size();
+
+	glm::mat4 fg_to_clip = object_to_clip * glm::rotate(spin, glm::vec3(0.0f, 0.0f, 1.0f));
+	glm::mat4 mg_to_clip = fg_to_clip * glm::scale(glm::vec3(1.0f + 0.2f * std::pow(1.0f - fade_in,2.0f))); //maybe?
 
 	//----- actually draw ----
 	// (Based on DrawLines.cpp)
@@ -684,7 +754,13 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 	glUniformMatrix4fv(OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(object_to_clip));
 
 	glBindVertexArray(vertex_buffer_for_color_program);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, GLsizei(attribs.size()));
+	glDrawArrays(GL_TRIANGLE_STRIP, bg_start, GLsizei(bg_end - bg_start));
+
+	glUniformMatrix4fv(OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(mg_to_clip));
+	glDrawArrays(GL_TRIANGLE_STRIP, mg_start, GLsizei(mg_end - mg_start));
+
+	glUniformMatrix4fv(OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(fg_to_clip));
+	glDrawArrays(GL_TRIANGLE_STRIP, fg_start, GLsizei(fg_end - fg_start));
 	glBindVertexArray(0);
 
 	glUseProgram(0);
