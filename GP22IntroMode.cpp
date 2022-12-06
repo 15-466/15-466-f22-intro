@@ -107,11 +107,11 @@ GP22IntroMode::LetterPath::LetterPath() {
 	ofs_K = mt() / float(mt.max()) * 2.0f * float(M_PI);
 }
 
-void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float time) const {
+void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float t) const {
 	std::vector< glm::vec2 > path = base;
 
-	//float vel_K = (std::sin(time * 10.0f + ofs_K + 1.0f) * 0.5f + 0.5f) * (0.7f - 0.3f) + 0.3f;
-	//float vel_init = (std::sin(time * 7.0f + ofs_init + 2.0f) * 0.5f + 0.5f) * (10.0f - 6.0f) + 6.0f;
+	//float vel_K = (std::sin(t * 10.0f + ofs_K + 1.0f) * 0.5f + 0.5f) * (0.7f - 0.3f) + 0.3f;
+	//float vel_init = (std::sin(t * 7.0f + ofs_init + 2.0f) * 0.5f + 0.5f) * (10.0f - 6.0f) + 6.0f;
 	float vel_K = (std::sin(1.0f * 10.0f + ofs_K + 1.0f) * 0.5f + 0.5f) * (0.7f - 0.3f) + 0.3f;
 	float vel_init = (std::sin(1.0f * 7.0f + ofs_init + 2.0f) * 0.5f + 0.5f) * (7.0f - 5.0f) + 5.0f;
 
@@ -155,7 +155,7 @@ void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float ti
 
 	constexpr float VEL = 20.0f;
 
-	float front = (strike - time) * VEL;
+	float front = (strike - t) * VEL;
 	float begin1 = std::max(front, 0.0f);
 	float begin0 = begin1 - 0.01f * VEL;
 	float begin2 = std::max(front + 0.05f * VEL, 0.0f);
@@ -754,13 +754,13 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 	glUniformMatrix4fv(OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(object_to_clip));
 
 	glBindVertexArray(vertex_buffer_for_color_program);
-	glDrawArrays(GL_TRIANGLE_STRIP, bg_start, GLsizei(bg_end - bg_start));
+	glDrawArrays(GL_TRIANGLE_STRIP, GLint(bg_start), GLsizei(bg_end - bg_start));
 
 	glUniformMatrix4fv(OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(mg_to_clip));
-	glDrawArrays(GL_TRIANGLE_STRIP, mg_start, GLsizei(mg_end - mg_start));
+	glDrawArrays(GL_TRIANGLE_STRIP, GLint(mg_start), GLsizei(mg_end - mg_start));
 
 	glUniformMatrix4fv(OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(fg_to_clip));
-	glDrawArrays(GL_TRIANGLE_STRIP, fg_start, GLsizei(fg_end - fg_start));
+	glDrawArrays(GL_TRIANGLE_STRIP, GLint(fg_start), GLsizei(fg_end - fg_start));
 	glBindVertexArray(0);
 
 	glUseProgram(0);
