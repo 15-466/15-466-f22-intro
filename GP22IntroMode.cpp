@@ -146,10 +146,10 @@ void GP22IntroMode::LetterPath::compute(std::vector< Vertex > *attribs, float t)
 	std::vector< float > len;
 	len.reserve(path.size());
 	double total = 0.0;
-	len.emplace_back(total);
+	len.emplace_back(float(total));
 	for (uint32_t i = 1; i < path.size(); ++i) {
 		total += glm::length(path[i] - path[i-1]);
-		len.emplace_back(total);
+		len.emplace_back(float(total));
 	}
 	float core = len[base.size()-1];
 
@@ -584,18 +584,11 @@ GP22IntroMode::~GP22IntroMode() {
 }
 
 bool GP22IntroMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
-	/* DEBUG!
 	if (evt.type == SDL_KEYDOWN) {
 		//on any key press, skip the rest of the intro:
 		music->set_volume(0.0f, 1.0f / 10.0f);
 		Mode::set_current(next_mode);
 		return true;
-	}
-	*/
-	if (evt.type == SDL_MOUSEMOTION) {
-		//vel_K = 0.3f + (0.7f - 0.3f) * (evt.motion.x / float(window_size.x));
-		//vel_init = 6.0f + (10.0f - 6.0f) * (evt.motion.y / float(window_size.y));
-		//std::cout << vel_K << " / " << vel_init << std::endl;
 	}
 	return false;
 }
@@ -603,10 +596,9 @@ bool GP22IntroMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_
 void GP22IntroMode::update(float elapsed) {
 	time += elapsed;
 	if (time > 10.0f) {
-		time -= 10.0f; //DEBUG!
 		music->set_volume(0.0f, 1.0f / 10.0f);
-		//Mode::set_current(next_mode); //DEBUG, should be here!
-		Mode::set_current(std::make_shared< GP22IntroMode >(next_mode));
+		Mode::set_current(next_mode);
+		//Mode::set_current(std::make_shared< GP22IntroMode >(next_mode)); //<--- loop forever for testing
 		return;
 	}
 
@@ -703,10 +695,10 @@ void GP22IntroMode::draw(glm::uvec2 const &drawable_size) {
 			std::vector< float > len;
 			len.reserve(m.size());
 			double total = 0.0;
-			len.emplace_back(total);
+			len.emplace_back(float(total));
 			for (uint32_t i = 1; i < m.size(); ++i) {
 				total += glm::length(m[i] - m[i-1]);
-				len.emplace_back(total);
+				len.emplace_back(float(total));
 			}
 			stroke(&attribs, m, len, 0.16f, glm::u8vec4(glm::u8vec3(FgFill2), fade8), {}, glm::u8vec4(glm::u8vec3(FgFill1), fade8));
 		}
